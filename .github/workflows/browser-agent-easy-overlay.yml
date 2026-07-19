@@ -1,0 +1,33 @@
+name: Browser Agent Easy Overlay
+
+on:
+  pull_request:
+    paths:
+      - "server.toml"
+      - "start.sh"
+      - "apply_easy_overlay.sh"
+      - "scripts/easy_launcher.py"
+      - "scripts/easy_launcher_bootstrap.py"
+      - "scripts/easy_overlay_selftest.py"
+      - ".github/workflows/browser-agent-easy-overlay.yml"
+  push:
+    branches:
+      - "artifact/browser-agent-stage1-easy-v0.1.6"
+
+jobs:
+  static-overlay:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Shell syntax
+        run: bash -n start.sh apply_easy_overlay.sh
+      - name: Bootstrap syntax
+        run: python -m py_compile scripts/easy_launcher_bootstrap.py scripts/easy_overlay_selftest.py
+      - name: Repaired launcher compile test
+        run: python scripts/easy_overlay_selftest.py
