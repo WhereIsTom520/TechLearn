@@ -1,0 +1,124 @@
+# Browser Agent Stage 1 — 8×A100 傻瓜版统一配置
+
+[project]
+name = "browser-agent-stage1"
+base_config = "config.toml"
+auto_create_environment = true
+reuse_system_torch = true
+venv_dir = ".venv"
+runtime_dir = "runtime"
+run_dir = "runs"
+checkpoint_dir = "runs/checkpoints"
+log_dir = "runs/logs"
+
+[environment]
+python = "python3"
+expected_python = "3.10"
+expected_torch_prefix = "2.11."
+expected_cuda = "12.8"
+required_gpu_count = 8
+pip_index = "https://pypi.tuna.tsinghua.edu.cn/simple"
+chromium_mode = "auto" # auto | system | playwright
+chromium_executable = ""
+install_playwright_browser = true
+
+[hardware]
+gpu_ids = [0, 1, 2, 3, 4, 5, 6, 7]
+distributed_backend = "nccl"
+environments_per_gpu = 1
+mixed_precision = true
+allow_tf32 = true
+
+[ports]
+host = "127.0.0.1"
+base_port = 18500
+ports_per_gpu = 1
+auto_find_free_block = true
+search_until_port = 25000
+master_port = 29510
+auto_find_master_port = true
+
+[training]
+updates = 10000
+probe_updates = 2
+seed = 42
+rollout_steps = 128
+ppo_epochs = 4
+minibatch_size = 256
+learning_rate = 0.0001
+value_learning_rate = 0.0001
+gamma = 0.99
+gae_lambda = 0.95
+clip_ratio = 0.2
+value_clip_ratio = 0.2
+entropy_coef = 0.01
+value_coef = 0.5
+text_aux_coef = 1.0
+max_grad_norm = 1.0
+target_kl = 0.02
+checkpoint_every_updates = 50
+evaluation_every_updates = 25
+log_every_updates = 1
+resume = "auto" # auto | never | required
+checkpoint_path = ""
+
+[browser]
+headless = true
+page_width = 1280
+page_height = 900
+navigation_timeout_ms = 15000
+action_timeout_ms = 5000
+episode_timeout_seconds = 120
+disable_service_workers = true
+allow_downloads = false
+restart_failed_environment = true
+max_environment_restarts = 20
+
+[tasks]
+mode = "http"
+train_template_variants = 8
+evaluation_template_variants = 4
+max_episode_steps = 48
+max_elements = 128
+max_arguments = 32
+max_generated_text_tokens = 64
+enabled = []
+
+[curriculum]
+enabled = true
+minimum_episodes_per_task = 100
+success_rate_threshold = 0.80
+replay_previous_tasks = true
+previous_task_probability = 0.20
+
+[logging]
+console = true
+tensorboard = true
+jsonl = true
+save_action_statistics = true
+save_task_statistics = true
+save_curriculum_statistics = true
+
+[security]
+allow_external_network = false
+allowed_hosts = ["127.0.0.1", "localhost"]
+strict_origin_whitelist = true
+block_file_urls = true
+block_downloads = true
+block_websockets = true
+
+[check]
+run_python_syntax = true
+run_shell_syntax = true
+run_unit_tests = true
+run_render_matrix = true
+run_browser_action_test = true
+run_real_ppo_test = true
+run_learning_probe = true
+run_ddp_during_check = false
+
+# v0.1.4内部配置键名发生变化时，可在这里添加精确路径覆盖。
+# 示例：
+# [overrides]
+# "training.rollout_steps" = 128
+[overrides]
