@@ -23,7 +23,7 @@ def repaired_source() -> str:
 
     replacement = '''def write_compatibility_shims(site: Path) -> None:
     content = """\\
-\"\"\"Python 3.10 compatibility for the Stage-1 runtime.\"\"\"
+# Python 3.10 compatibility for the Stage-1 runtime.
 import datetime
 import enum
 import typing
