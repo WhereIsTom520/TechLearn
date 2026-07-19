@@ -82,10 +82,10 @@ cp "$OVERLAY_DIR/start.sh" "$STAGE/start.sh"
 cp "$OVERLAY_DIR/README_EASY_CN.md" "$STAGE/README_EASY_CN.md"
 mkdir -p "$STAGE/scripts"
 cp "$OVERLAY_DIR/scripts/easy_launcher.py" "$STAGE/scripts/easy_launcher.py"
+cp "$OVERLAY_DIR/scripts/easy_launcher_bootstrap.py" "$STAGE/scripts/easy_launcher_bootstrap.py"
 
-# Replace the compatibility writer as text before compiling. This avoids any
-# dependence on the build host's Python minor version and guarantees a simple,
-# valid sitecustomize.py generator in the delivered package.
+# Replace the compatibility writer as text before compiling. The bootstrap
+# bridge applies the same replacement in memory when running the overlay.
 python3 - "$STAGE/scripts/easy_launcher.py" <<'PY'
 from pathlib import Path
 import sys
@@ -143,6 +143,7 @@ printf '%s\n' "$VERSION" > "$STAGE/EASY_RELEASE_VERSION.txt"
 chmod +x \
   "$STAGE/start.sh" \
   "$STAGE/scripts/easy_launcher.py" \
+  "$STAGE/scripts/easy_launcher_bootstrap.py" \
   "$STAGE/run_train_8xa100.sh" \
   "$STAGE/run_smoke_linux.sh"
 
@@ -162,8 +163,6 @@ text, count = re.subn(
 )
 if count != 1:
     raise SystemExit("Unable to patch requires-python in pyproject.toml")
-# Installation uses --no-deps and reuses the verified server CUDA Torch, but
-# package metadata must not reject 2.11.0 when inspected.
 text = re.sub(
     r'"torch[^"\n]*"',
     '"torch>=2.11,<2.12"',
@@ -180,6 +179,7 @@ bash -n \
   "$STAGE/run_smoke_linux.sh"
 python3 -m py_compile \
   "$STAGE/scripts/easy_launcher.py" \
+  "$STAGE/scripts/easy_launcher_bootstrap.py" \
   "$STAGE/tomllib.py"
 
 echo "[6/9] Checking unified configuration structure..."
