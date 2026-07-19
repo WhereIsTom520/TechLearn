@@ -35,7 +35,7 @@ case "$COMMAND" in
 esac
 
 # 依赖零第三方包的最小TOML字符串读取，仅用于找到Python和venv。
-# 完整TOML解析、类型校验和Schema校验由easy_launcher.py完成。
+# 完整TOML解析、类型校验和Schema校验由启动器完成。
 toml_string() {
   local section="$1"
   local key="$2"
@@ -73,7 +73,7 @@ PIP_INDEX="$(toml_string environment pip_index '')"
 [[ "$VENV_DIR" = /* ]] || VENV_DIR="$ROOT/$VENV_DIR"
 [[ "$BOOTSTRAP_DIR" = /* ]] || BOOTSTRAP_DIR="$ROOT/$BOOTSTRAP_DIR"
 
-LAUNCHER="$ROOT/scripts/easy_launcher.py"
+LAUNCHER="$ROOT/scripts/easy_launcher_bootstrap.py"
 [[ -f "$LAUNCHER" ]] || {
   echo "[ERROR] Missing $LAUNCHER" >&2
   exit 1
