@@ -84,55 +84,6 @@ mkdir -p "$STAGE/scripts"
 cp "$OVERLAY_DIR/scripts/easy_launcher.py" "$STAGE/scripts/easy_launcher.py"
 cp "$OVERLAY_DIR/scripts/easy_launcher_bootstrap.py" "$STAGE/scripts/easy_launcher_bootstrap.py"
 
-# Replace the compatibility writer as text before compiling. The bootstrap
-# bridge applies the same replacement in memory when running the overlay.
-python3 - "$STAGE/scripts/easy_launcher.py" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8")
-start_marker = "def write_compatibility_shims(site: Path) -> None:\n"
-end_marker = "\ndef create_project_environment(\n"
-start = text.find(start_marker)
-end = text.find(end_marker, start)
-if start < 0 or end < 0:
-    raise SystemExit("Unable to locate compatibility-shim function")
-replacement = '''def write_compatibility_shims(site: Path) -> None:
-    content = """\\
-# Python 3.10 compatibility for the Stage-1 runtime.
-import datetime
-import enum
-import typing
-
-try:
-    import typing_extensions
-except ImportError:
-    typing_extensions = None
-
-if typing_extensions is not None:
-    for name in (
-        \"Self\", \"LiteralString\", \"Never\", \"NotRequired\",
-        \"Required\", \"TypeVarTuple\", \"Unpack\", \"override\",
-    ):
-        if not hasattr(typing, name) and hasattr(typing_extensions, name):
-            setattr(typing, name, getattr(typing_extensions, name))
-
-if not hasattr(datetime, \"UTC\"):
-    datetime.UTC = datetime.timezone.utc
-
-if not hasattr(enum, \"StrEnum\"):
-    class StrEnum(str, enum.Enum):
-        def __str__(self):
-            return str(self.value)
-    enum.StrEnum = StrEnum
-"""
-    (site / "sitecustomize.py").write_text(content, encoding="utf-8")
-
-'''
-path.write_text(text[:start] + replacement + text[end + 1 :], encoding="utf-8")
-PY
-
 cat > "$STAGE/tomllib.py" <<'PY'
 """Python 3.10 compatibility wrapper for code that imports tomllib."""
 from tomli import TOMLDecodeError, load, loads
