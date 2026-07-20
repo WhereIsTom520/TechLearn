@@ -9,7 +9,6 @@ on:
       - "scripts/easy_launcher.py"
       - "scripts/easy_launcher_bootstrap.py"
       - "scripts/easy_overlay_selftest.py"
-      - "scripts/apply_v016_source_fixes.py"
       - ".github/workflows/browser-agent-easy-overlay.yml"
   push:
     branches:
@@ -29,7 +28,7 @@ jobs:
       - name: Shell syntax
         run: bash -n start.sh apply_easy_overlay.sh
       - name: Canonical Python syntax
-        run: python -m py_compile scripts/easy_launcher.py scripts/easy_launcher_bootstrap.py scripts/easy_overlay_selftest.py scripts/apply_v016_source_fixes.py
+        run: python -m py_compile scripts/easy_launcher.py scripts/easy_launcher_bootstrap.py scripts/easy_overlay_selftest.py
       - name: Canonical launcher self-test
         run: python scripts/easy_overlay_selftest.py
       - name: Builder must not rewrite launcher source
