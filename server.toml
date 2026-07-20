@@ -1,11 +1,14 @@
-# Browser Agent Stage 1 — 8×A100 傻瓜版统一配置
+# Browser Agent Stage 1 — 8×A100 傻瓜版统一配置 v0.1.6
+# 日常只修改本文件，只运行 ./start.sh <命令>。
 
 [project]
 name = "browser-agent-stage1"
 base_config = "config.toml"
 auto_create_environment = true
+auto_repair_environment = true
 reuse_system_torch = true
 venv_dir = ".venv"
+bootstrap_venv_dir = ".easy_bootstrap"
 runtime_dir = "runtime"
 run_dir = "runs"
 checkpoint_dir = "runs/checkpoints"
@@ -46,7 +49,6 @@ rollout_steps = 128
 ppo_epochs = 4
 minibatch_size = 256
 learning_rate = 0.0001
-value_learning_rate = 0.0001
 gamma = 0.99
 gae_lambda = 0.95
 clip_ratio = 0.2
@@ -75,6 +77,7 @@ restart_failed_environment = true
 max_environment_restarts = 20
 
 [tasks]
+# 第一阶段完整训练只允许真实本地HTTP任务服务器。
 mode = "http"
 train_template_variants = 8
 evaluation_template_variants = 4
@@ -91,34 +94,21 @@ success_rate_threshold = 0.80
 replay_previous_tasks = true
 previous_task_probability = 0.20
 
-[logging]
-console = true
-tensorboard = true
-jsonl = true
-save_action_statistics = true
-save_task_statistics = true
-save_curriculum_statistics = true
-
 [security]
+# 本版固定失败封闭：只允许本地任务服务器，禁止下载和外部网络。
 allow_external_network = false
 allowed_hosts = ["127.0.0.1", "localhost"]
 strict_origin_whitelist = true
-block_file_urls = true
-block_downloads = true
-block_websockets = true
 
 [check]
 run_python_syntax = true
 run_shell_syntax = true
 run_unit_tests = true
-run_render_matrix = true
-run_browser_action_test = true
-run_real_ppo_test = true
-run_learning_probe = true
-run_ddp_during_check = false
+run_full_browser_smoke = true
 
-# v0.1.4内部配置键名发生变化时，可在这里添加精确路径覆盖。
-# 示例：
-# [overrides]
-# "training.rollout_steps" = 128
-[overrides]
+# 启动器默认按唯一键路径定位基础config.toml。
+# 某个键出现0次或多次时会失败，不会猜测或静默忽略。
+# 仅当基础包以后改变Schema时，才在这里写精确目标路径：
+# [bindings]
+# "training.rollout_steps" = "ppo.rollout_steps"
+[bindings]

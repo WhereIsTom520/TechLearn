@@ -1,0 +1,172 @@
+name: Build Browser Agent Stage1 A800 Package
+
+on:
+  push:
+    branches:
+      - artifact/browser-agent-stage1-easy-v0.1.6
+    paths:
+      - browser_agent_stage1_v0.1.4.zip
+      - apply_easy_overlay.sh
+      - server.toml
+      - start.sh
+      - scripts/easy_launcher.py
+      - scripts/easy_launcher_bootstrap.py
+      - scripts/easy_overlay_selftest.py
+      - .github/workflows/build-browser-agent-a800.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      package_name: ${{ steps.meta.outputs.package_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require uploaded v0.1.4 base ZIP
+        run: |
+          test -f browser_agent_stage1_v0.1.4.zip || {
+            echo "Upload browser_agent_stage1_v0.1.4.zip to this branch first." >&2
+            exit 1
+          }
+          unzip -t browser_agent_stage1_v0.1.4.zip >/dev/null
+
+      - name: Build merged package
+        run: |
+          chmod +x apply_easy_overlay.sh
+          mkdir -p dist
+          ./apply_easy_overlay.sh ./browser_agent_stage1_v0.1.4.zip ./dist
+
+      - name: Normalize A800 package name
+        id: meta
+        run: |
+          source_zip="$(find dist -maxdepth 1 -type f -name 'browser_agent_stage1_easy_*.zip' | head -n1)"
+          test -n "$source_zip"
+          package_name="browser_agent_stage1_easy_v0.1.6_A800.zip"
+          cp "$source_zip" "dist/$package_name"
+          sha256sum "dist/$package_name" > "dist/$package_name.sha256"
+          unzip -t "dist/$package_name" >/dev/null
+          echo "package_name=$package_name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload merged package
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser_agent_stage1_easy_v0.1.6_A800
+          path: |
+            dist/browser_agent_stage1_easy_v0.1.6_A800.zip
+            dist/browser_agent_stage1_easy_v0.1.6_A800.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  validate:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11']
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: browser_agent_stage1_easy_v0.1.6_A800
+          path: artifact
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Verify SHA-256 and archive integrity
+        run: |
+          cd artifact
+          sha256sum -c browser_agent_stage1_easy_v0.1.6_A800.zip.sha256
+          unzip -t browser_agent_stage1_easy_v0.1.6_A800.zip >/dev/null
+
+      - name: Extract from clean directory
+        run: |
+          rm -rf verify
+          mkdir verify
+          unzip -q artifact/browser_agent_stage1_easy_v0.1.6_A800.zip -d verify
+          root="$(find verify -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          test -n "$root"
+          echo "PACKAGE_ROOT=$root" >> "$GITHUB_ENV"
+
+      - name: Required package structure
+        run: |
+          for required in \
+            pyproject.toml config.toml server.toml start.sh \
+            run_train_8xa100.sh run_smoke_linux.sh \
+            scripts/train.py scripts/easy_launcher.py \
+            scripts/easy_launcher_bootstrap.py \
+            PACKAGE_CONTENT_SHA256SUMS.txt SERVER_VALIDATION_REQUIRED.txt
+          do
+            test -e "$PACKAGE_ROOT/$required" || {
+              echo "Missing required path: $required" >&2
+              exit 1
+            }
+          done
+
+      - name: Shell syntax
+        run: |
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+          done < <(find "$PACKAGE_ROOT" -type f -name '*.sh' -print0)
+
+      - name: Canonical Python syntax
+        run: |
+          python -m compileall -q \
+            "$PACKAGE_ROOT/src" \
+            "$PACKAGE_ROOT/scripts" \
+            "$PACKAGE_ROOT/tests"
+          python -m py_compile \
+            "$PACKAGE_ROOT/scripts/easy_launcher.py" \
+            "$PACKAGE_ROOT/scripts/easy_launcher_bootstrap.py"
+
+      - name: TOML parse and objective checks
+        run: |
+          python -m pip install -q 'tomli>=2.2,<3'
+          python - "$PACKAGE_ROOT" <<'PY'
+          import sys
+          from pathlib import Path
+          import tomli
+
+          root = Path(sys.argv[1])
+          with (root / 'server.toml').open('rb') as handle:
+              server = tomli.load(handle)
+          with (root / 'config.toml').open('rb') as handle:
+              base = tomli.load(handle)
+
+          assert server['tasks']['mode'] == 'http'
+          assert server['security']['allow_external_network'] is False
+          assert server['browser']['allow_downloads'] is False
+          assert server['hardware']['distributed_backend'] == 'nccl'
+          assert server['environment']['required_gpu_count'] == 8
+          assert server['hardware']['gpu_ids'] == list(range(8))
+          assert server['training']['probe_updates'] > 0
+          assert isinstance(base, dict) and base
+
+          launcher = (root / 'scripts/easy_launcher.py').read_text(encoding='utf-8')
+          required_markers = [
+              'tasks.mode',
+              'validate_selected_gpu_ids',
+              'Configured GPU IDs do not exist',
+              'A checkpoint is required, but none was found',
+              'ports.ports_per_gpu must be >= hardware.environments_per_gpu',
+              'Chromium local HTTP probe',
+              'security.allow_external_network must remain false',
+          ]
+          missing = [item for item in required_markers if item not in launcher]
+          assert not missing, missing
+
+          train_entry = (root / 'run_train_8xa100.sh').read_text(encoding='utf-8')
+          assert '--updates' in train_entry
+          assert '--resume' in train_entry
+          print('[PASS] TOML and critical logic checks')
+          PY
+
+      - name: Package content manifest
+        run: |
+          cd "$PACKAGE_ROOT"
+          sha256sum -c PACKAGE_CONTENT_SHA256SUMS.txt
