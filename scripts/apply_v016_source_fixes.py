@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-PATH = Path("scripts/easy_launcher.py")
+LAUNCHER = Path("scripts/easy_launcher.py")
+BUILDER = Path("apply_easy_overlay.sh")
 
 
 def replace_between(text: str, start_marker: str, end_marker: str, replacement: str) -> str:
@@ -14,8 +15,8 @@ def replace_between(text: str, start_marker: str, end_marker: str, replacement: 
     return text[:start] + replacement + text[end + 1 :]
 
 
-def main() -> None:
-    text = PATH.read_text(encoding="utf-8")
+def patch_launcher() -> None:
+    text = LAUNCHER.read_text(encoding="utf-8")
 
     shim = '''def write_compatibility_shims(site: Path) -> None:
     content = (
@@ -93,7 +94,27 @@ def validate_selected_gpu_ids(
     elif new not in text:
         raise SystemExit("Unable to locate common_resolution GPU validation call")
 
-    PATH.write_text(text, encoding="utf-8")
+    LAUNCHER.write_text(text, encoding="utf-8")
+
+
+def patch_builder() -> None:
+    text = BUILDER.read_text(encoding="utf-8")
+    start_marker = "# Replace the compatibility writer as text before compiling."
+    end_marker = "cat > \"$STAGE/tomllib.py\" <<'PY'\n"
+    start = text.find(start_marker)
+    if start >= 0:
+        end = text.find(end_marker, start)
+        if end < 0:
+            raise SystemExit("Unable to locate builder source-rewrite block end")
+        text = text[:start] + end_marker + text[end + len(end_marker) :]
+    if "Replace the compatibility writer" in text:
+        raise SystemExit("Builder still contains source-rewrite logic")
+    BUILDER.write_text(text, encoding="utf-8")
+
+
+def main() -> None:
+    patch_launcher()
+    patch_builder()
 
 
 if __name__ == "__main__":
