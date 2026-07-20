@@ -189,6 +189,10 @@ TARGET_PATTERNS: dict[str, tuple[str, ...]] = {
         "browser.max_environment_restarts", "environment.max_environment_restarts",
         "max_environment_restarts",
     ),
+    "tasks.mode": (
+        "tasks.mode", "task.mode", "environment.task_mode",
+        "task_mode",
+    ),
     "tasks.train_template_variants": (
         "tasks.train_template_variants", "synthetic.train_template_variants",
         "train_template_variants",
@@ -679,29 +683,28 @@ def pip_install(
 
 
 def write_compatibility_shims(site: Path) -> None:
-    (site / "sitecustomize.py").write_text(
-        '''"""Python 3.10 compatibility for the Stage-1 runtime."""\n'
-        'import datetime\n'
-        'import enum\n'
-        'import typing\n'
-        'try:\n'
-        '    import typing_extensions\n'
-        'except ImportError:\n'
-        '    typing_extensions = None\n'
-        'if typing_extensions is not None:\n'
-        '    for _name in ("Self", "LiteralString", "Never", "NotRequired", "Required", "TypeVarTuple", "Unpack", "override"):\n'
-        '        if not hasattr(typing, _name) and hasattr(typing_extensions, _name):\n'
-        '            setattr(typing, _name, getattr(typing_extensions, _name))\n'
-        'if not hasattr(datetime, "UTC"):\n'
-        '    datetime.UTC = datetime.timezone.utc\n'
-        'if not hasattr(enum, "StrEnum"):\n'
-        '    class StrEnum(str, enum.Enum):\n'
-        '        def __str__(self):\n'
-        '            return str(self.value)\n'
-        '    enum.StrEnum = StrEnum\n',
-        encoding="utf-8",
+    content = (
+        "# Python 3.10 compatibility for the Stage-1 runtime.\n"
+        "import datetime\n"
+        "import enum\n"
+        "import typing\n"
+        "try:\n"
+        "    import typing_extensions\n"
+        "except ImportError:\n"
+        "    typing_extensions = None\n"
+        "if typing_extensions is not None:\n"
+        "    for name in (\"Self\", \"LiteralString\", \"Never\", \"NotRequired\", \"Required\", \"TypeVarTuple\", \"Unpack\", \"override\"):\n"
+        "        if not hasattr(typing, name) and hasattr(typing_extensions, name):\n"
+        "            setattr(typing, name, getattr(typing_extensions, name))\n"
+        "if not hasattr(datetime, \"UTC\"):\n"
+        "    datetime.UTC = datetime.timezone.utc\n"
+        "if not hasattr(enum, \"StrEnum\"):\n"
+        "    class StrEnum(str, enum.Enum):\n"
+        "        def __str__(self):\n"
+        "            return str(self.value)\n"
+        "    enum.StrEnum = StrEnum\n"
     )
-
+    (site / "sitecustomize.py").write_text(content, encoding="utf-8")
 
 def create_project_environment(
     config: dict[str, Any],
@@ -808,6 +811,20 @@ def inspect_project_torch(config: dict[str, Any]) -> dict[str, Any]:
     if str(value["torch_cuda"]) != str(expected["torch_cuda"]):
         fail("Project venv CUDA runtime differs from verified system runtime")
     return value
+
+
+def validate_selected_gpu_ids(
+    config: dict[str, Any],
+    torch_info: dict[str, Any],
+) -> None:
+    available = int(torch_info["gpu_count"])
+    selected = [int(item) for item in config["hardware"]["gpu_ids"]]
+    invalid = [gpu_id for gpu_id in selected if gpu_id >= available]
+    if invalid:
+        fail(
+            f"Configured GPU IDs do not exist: {invalid}; "
+            f"available IDs are 0..{available - 1}"
+        )
 
 
 def port_is_free(host: str, port: int) -> bool:
@@ -1299,6 +1316,7 @@ def common_resolution(
     config: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], str, Path, dict[str, str]]:
     torch_info = inspect_project_torch(config)
+    validate_selected_gpu_ids(config, torch_info)
     ports = resolve_ports(config)
     chromium = discover_chromium(config)
     effective_config, binding_report = prepare_effective_config(config, ports)
