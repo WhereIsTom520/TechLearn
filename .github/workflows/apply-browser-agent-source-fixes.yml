@@ -7,6 +7,7 @@ on:
     paths:
       - "scripts/apply_v016_source_fixes.py"
       - "scripts/easy_launcher.py"
+      - "apply_easy_overlay.sh"
       - ".github/workflows/apply-browser-agent-source-fixes.yml"
 
 permissions:
@@ -25,16 +26,18 @@ jobs:
           python-version: "3.10"
       - name: Apply deterministic source fixes
         run: python scripts/apply_v016_source_fixes.py
-      - name: Compile repaired source
-        run: python -m py_compile scripts/easy_launcher.py
-      - name: Commit repaired source when changed
+      - name: Compile canonical source
+        run: python -m py_compile scripts/easy_launcher.py scripts/easy_launcher_bootstrap.py
+      - name: Validate builder syntax
+        run: bash -n apply_easy_overlay.sh
+      - name: Commit repaired sources when changed
         run: |
           if git diff --quiet; then
-            echo "Source already repaired"
+            echo "Sources already repaired"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/easy_launcher.py
-          git commit -m "fix: apply direct Stage-1 launcher source repairs"
+          git add scripts/easy_launcher.py apply_easy_overlay.sh
+          git commit -m "fix: apply direct Stage-1 source and builder repairs"
           git push origin HEAD:artifact/browser-agent-stage1-easy-v0.1.6
