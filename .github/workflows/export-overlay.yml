@@ -1,6 +1,9 @@
 name: Export Browser Agent Overlay
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/export-overlay.yml
   push:
     branches:
       - artifact/browser-agent-stage1-easy-v0.1.6
